@@ -23,11 +23,11 @@ _For ROracle see roracle-install https://github.com/StudioEtrange/roracle-instal
 
 NOTE : Default install path is R Packages default path.
 
-### Install build tools
+### OPTIONAL : Install build tools
 
-	./setup.sh
+	./buildtools.sh
 
-_NOTE : This script will test if build tools are installed. If you have already build tools or if your system package manager does not match, bypass this step and install build tools by yourself_
+_NOTE : This script will test if build tools are installed on your system and will try to install them. You should bypass this step and install build tools by yourself if needed_
 
 
 ## Usage of RODBC
