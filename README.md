@@ -11,11 +11,15 @@
 
 ## Install
 
+### Help
+
+	./install.sh -h|--help
+	
 ### Build & install RODBC package
 
 	./install.sh [<path>]
 
-NOTE : Default install path is rodbc-install/workspace.
+NOTE : Default install path is R Packages default path.
 
 ### Install build tools
 
@@ -30,23 +34,13 @@ You can use it within your R script
 
 	localRepo <- Sys.getenv("LOCAL_R_REPO")
 	.libPaths( c( .libPaths(), localRepo) )
-	library(DBI)
-	library(ROracle)
+	library(RODBC)
+
 
 And then call this R script from a shell (for example)
 
 	export LOCAL_R_REPO=/path/to/rpackage/install/folder
-	# Optional
-	export TNS_ADMIN="/path/folder/"
 	Rscript my_script.R
-
-Your /etc/host **MUST** be correctly defined. Oracle Instant Client must resolve your hostname
-
-	127.0.0.1 localhost my_host_name
-
-If you use tnsnames.ora file, put it in a folder and set TNS_ADMIN env var (only folder path, without tnsnames.ora)
-
-	export TNS_ADMIN="/path/folder/"
 
 ## Note on Stella
 
