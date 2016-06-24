@@ -3,6 +3,8 @@
 * Build & Install unixODBC
 * Build & Install RODBC package on a GNU/Linux system or on MacOs
 
+* For ROracle see roracle-install https://github.com/StudioEtrange/roracle-install
+
 ## Prerequites
 
 * R should be present on system
@@ -14,7 +16,7 @@
 ### Help
 
 	./install.sh -h|--help
-	
+
 ### Build & install RODBC package
 
 	./install.sh [<path>]
