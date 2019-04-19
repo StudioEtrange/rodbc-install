@@ -47,10 +47,7 @@ And then call this R script from a shell (for example)
 ## Note on Stella
 
 * This script is built on stella framework (https://github.com/StudioEtrange/stella)
-* If you do not have stella on your system, it will be auto-installed when using this script
-* OR you can install it manually with
 
-	https_proxy=http://host:port ./stella-link.sh bootstrap
 
 ## Usefull Links
 
