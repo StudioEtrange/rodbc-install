@@ -57,7 +57,7 @@ $STELLA_API feature_install "unixodbc#${UNIXODBC_VERSION}" "EXPORT $INSTALL_ROOT
 # Install Package RODBC
 echo "-*--*-** Install RODBC **-*--*-"
 # download RODBC source
-$STELLA_API get_resource "RODBC" "https://cran.r-project.org/src/contrib/RODBC_${RODBC_VERSION}.tar.gz" "HTTP_ZIP" "$STELLA_APP_WORK_ROOT"
+$STELLA_API get_resource "RODBC" "https://github.com/cran/RODBC/archive/${RODBC_VERSION}.tar.gz" "HTTP_ZIP" "$STELLA_APP_WORK_ROOT"
 # patch RODBC.c
 sed -i".bak" 's/include <config.h>/include "config.h"/' $STELLA_APP_WORK_ROOT/RODBC/src/RODBC.c
 
