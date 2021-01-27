@@ -23,6 +23,10 @@ _For ROracle see roracle-install https://github.com/StudioEtrange/roracle-instal
 
 NOTE : Default install path is R Packages default path.
 
+### OPTIONAL : Choose versions
+
+	RODBC_VERSION="1.3-13" UNIXODBC_VERSION="2_3_4" ./install.sh [<path>]
+
 ### OPTIONAL : Install build tools
 
 	./buildtools.sh
