@@ -6,7 +6,7 @@ _STELLA_COMMON_BUILD_LINK_INCLUDED_=1
 
 __link_feature_library() {
 	local SCHEMA="$1"
-	local OPT="$2"
+	local _link_OPT="$2"
 	# FORCE_STATIC -- force link to static version of lib (by isolating it)
 	# FORCE_DYNAMIC -- force link to dynamic version of lib (by isolating it)
 	# TODO (see windows impl.) : FORCE_RENAME -- rename files when isolating files -- only apply when FORCE_STATIC or FORCE_DYNAMIC is ON
@@ -15,7 +15,7 @@ __link_feature_library() {
 	# FORCE_INCLUDE_FOLDER <path> -- folder prefix where include resides, default "/include"
 	# GET_FLAGS <prefix> -- get prefix_C_CXX_FLAGS, prefix_CPP_FLAGS, prefix_LINK_FLAGS with correct flags
 	# GET_FOLDER <prefix> -- get prefix_ROOT, prefix_LIB, prefix_BIN, prefix_INCLUDE with correct path
-	# NO_SET_FLAGS -- do not set stella build system flags (by default, flags will be generated) and do not add RPATH values
+	# NO_SET_FLAGS -- do not set stella build system flags (by default, flags will be generated) AND do not add RPATH values
 	# LIBS_NAME -- libraries name to use with -l arg -- you can specify several libraries. If you do not use LIBS_NAME -l flag will not be setted, only -L will be setted. If you use LIBS_NAME both -l and -L flags will be setted
   # USE_PKG_CONFIG -- use of pkg-config
 
@@ -54,7 +54,7 @@ __link_feature_library() {
 			;;
 	esac
 
-	for o in $OPT; do
+	for o in $_link_OPT; do
 		[ "$o" = "USE_PKG_CONFIG" ] && _opt_use_pkg_config=ON && _flag_libs_name=OFF
 		[ "$o" = "FORCE_STATIC" ] && _opt_flavour=$o && _flag_libs_name=OFF
 		[ "$o" = "FORCE_DYNAMIC" ] && _opt_flavour=$o && _flag_libs_name=OFF
@@ -93,8 +93,22 @@ __link_feature_library() {
 				;;
 	esac
 
+	# NOTE when linking to a system lib, we do not have control over things and all options are disabled
 	if [ "$_origin" = "SYSTEM" ]; then
+		STELLA_LINKED_LIBS_SYSTEM_LIST="$STELLA_LINKED_LIBS_SYSTEM_LIST [ ${SCHEMA} options: ${_link_OPT} ]"
 		echo "We do not link against STELLA version of $SCHEMA, but from SYSTEM."
+		if [ "$_opt_use_pkg_config" = "ON" ]; then
+			__add_toolset "pkgconfig"
+			# we need to add some defaut seach into path, because pkgconfig have default values from its install path
+			# pkgconfig is installed inside stella and do not have correct default values when we want to link against SYSTEM libraries
+			echo "** WARN : adding some system lib search path for pkg-config, because we use pkg-config for a SYSTEM lib"
+			# TODO __default_linker_search_path should receive arch, because linker search path depend on arch
+			__def_path=$(__default_linker_search_path)
+			__def_path="${__def_path//:/ }"
+			for _p in $__def_path; do
+				STELLA_BUILD_PKG_CONFIG_PATH="${STELLA_BUILD_PKG_CONFIG_PATH}:${_p}/pkgconfig"
+			done
+		fi
 		return
 	fi
 
@@ -106,15 +120,14 @@ __link_feature_library() {
 
 	# INSPECT required lib through schema
 	__push_schema_context
-	__feature_inspect $SCHEMA
+	__feature_inspect "${SCHEMA}"
 	if [ "$TEST_FEATURE" = "0" ]; then
-		echo " ** ERROR : depend on lib $SCHEMA"
+		echo " ** ERROR : depend on lib $SCHEMA but not installed - you may add it to FEAT_SOURCE_DEPENDENCIES"
 		__pop_schema_context
 		return
 	fi
 	# TODO here : full reinit (or call of FEAT_ENV_CALLBACK) of the feature to override other versions of the feature
-
-	STELLA_LINKED_LIBS_LIST="$STELLA_LINKED_LIBS_LIST $SCHEMA"
+	STELLA_LINKED_LIBS_LIST="$STELLA_LINKED_LIBS_LIST [ ${SCHEMA} options: ${_link_OPT} ]"
 	local REQUIRED_LIB_ROOT="$FEAT_INSTALL_ROOT"
 	local REQUIRED_LIB_NAME="$FEAT_NAME"
 	__pop_schema_context

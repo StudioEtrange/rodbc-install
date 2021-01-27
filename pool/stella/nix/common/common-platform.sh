@@ -2,6 +2,9 @@
 if [ ! "$_STELLA_PLATFORM_INCLUDED_" = "1" ]; then
 _STELLA_PLATFORM_INCLUDED_=1
 
+# NOTE :
+#			This file contains specific code depending on the system
+
 
 # DISTRIB/OS/PLATFORM INFO ---------------------------
 
@@ -119,7 +122,7 @@ __get_os_env_from_kernel() {
 
 __set_current_platform_info() {
 
-	# call screenFetch
+	# call screenFetch once by setting/unsetting  exit function and sourcing screenfetch
 	# https://github.com/KittyKatt/screenFetch
 	exit() {
 	:
@@ -147,6 +150,8 @@ __set_current_platform_info() {
 	# http://stackoverflow.com/a/10140985
 	# http://unix.stackexchange.com/a/24772
 	# http://www.cyberciti.biz/faq/linux-how-to-find-if-processor-is-64-bit-or-not/
+	# https://www.sysadmit.com/2016/02/linux-como-saber-si-es-32-o-64-bits.html
+	# https://superuser.com/questions/208301/linux-command-to-return-number-of-bits-32-or-64/208306#208306
 
 	# CPU 64Bits capable
 	STELLA_CPU_ARCH=
@@ -160,6 +165,8 @@ __set_current_platform_info() {
 		[ "$_cpu" = "1" ] && STELLA_CPU_ARCH=64
 	fi
 
+	#  Note that on several architectures, a 64-bit kernel can run 32-bit userland programs,
+	#  so even if the uname -m shows a 64-bit kernel, there is no guarantee that 64-bit libraries will be available.
 	if [ "$(uname -m | grep 64)" = "" ]; then
 		STELLA_KERNEL_ARCH=32
 	else
@@ -170,19 +177,7 @@ __set_current_platform_info() {
 	STELLA_C_ARCH=$(getconf LONG_BIT)
 	STELLA_USERSPACE_ARCH=unknown
 
-	local _err=
-	type netstat &>/dev/null || _err=1
-	if [ "$_err" = "" ]; then
-		# NOTE : we pick the first default interface if we have more than one
-		STELLA_DEFAULT_INTERFACE=$(netstat -rn | awk '/^0.0.0.0/ {thif=substr($0,74,10); print thif;} /^default.*UG/ {thif=substr($0,65,10); print thif;}' | head -1)
-	fi
-
-	_err=
-	type ifconfig &>/dev/null || _err=1
-	if [ "$_err" = "" ]; then
-		STELLA_HOST_DEFAULT_IP=$(ifconfig ${STELLA_DEFAULT_INTERFACE} | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*')
-		STELLA_HOST_IP=$(ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*')
-	fi
+	__get_network_info
 
 	__override_platform_command
 
@@ -218,9 +213,11 @@ __override_platform_command() {
 	fi
 
 	if [ "$STELLA_CURRENT_PLATFORM" = "darwin" ]; then
-		GETOPT_CMD=PURE_BASH
+		#GETOPT_CMD=PURE_BASH
+		STELLA_ARGPARSE_GETOPT_DEFAULT=PURE_BASH
 	else
-		GETOPT_CMD=getopt
+		#GETOPT_CMD=getopt
+		STELLA_ARGPARSE_GETOPT_DEFAULT=getopt
 	fi
 
 
@@ -279,10 +276,6 @@ __require() {
 
 	echo "** REQUIRE $_id ($_artefact)"
 	local _err=
-	# if [[ ! -n `which $_artefact 2> /dev/null` ]]; then
-	# 	_err=1
-	# fi
-
 	type $_artefact &>/dev/null || _err=1
 
 	if [ "$_err" = "1" ]; then
@@ -312,8 +305,8 @@ __require() {
 			else
 				if [ "$_opt_stella_feature" = "ON" ]; then
 					echo "** REQUIRE $_id : installing it from stella"
-					(__feature_install "$_id" "INTERNAL HIDDEN")
-					__feature_init "$_id" "HIDDEN"
+					(__feature_install "$_id" "INTERNAL NON_DECLARED")
+					__feature_init "$_id" "NON_DECLARED"
 				else
 					echo "** ERROR -- Please install $_artefact"
 					echo "-- For a system install : try stella.sh sys install $_id OR your regular OS package manager"
@@ -328,7 +321,7 @@ __require() {
 	return $_result
 }
 
-# TOOLSET specific ----------------------------
+# TOOLSET specific --------------------------------------------------------
 
 # http://stackoverflow.com/questions/5188267/checking-the-gcc-version-in-a-makefile
 # return X.Y.Z as version of current gcc
@@ -345,10 +338,10 @@ __gcc_version_int() {
 
 # check if current gcc version hit the minimal version required
 # first param : X_Y_Z (or X_Y)
-# return 1 if required minimal version is fullfilled
+# return 1 if required minimal version is fullfilled by the current gcc version
 __gcc_check_min_version() {
 	local _required_ver=$1
-	expr $(__gcc_version_int) \<= $(echo $_required_ver | sed -e 's/_\([0-9][0-9]\)/\1/g' -e 's/_\([0-9]\)/0\1/g' -e 's/^[0-9]\{3,4\}$/&00/')
+	expr $(__gcc_version_int) \>= $(echo $_required_ver | sed -e 's/_\([0-9][0-9]\)/\1/g' -e 's/_\([0-9]\)/0\1/g' -e 's/^[0-9]\{3,4\}$/&00/')
 }
 
 # detect if current gcc binary is in fact clang (mainly for MacOS)
@@ -361,25 +354,129 @@ __gcc_is_clang() {
 	fi
 }
 
-# RUNTIME specific ----------------------------
 
-
-# retrieve current pyconfig.h
-__python_get_pyconfig() {
-	# /Library/Frameworks/Python.framework/Versions/2.7/include/python2.7/pyconfig.h
-	python -c 'import sysconfig;print(sysconfig.get_config_h_filename());'
-}
-
-# get python lib folder
-__python_get_lib_path() {
-	# /Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7
-	python -c 'import sysconfig;print(sysconfig.get_path("stdlib"));'
+# return the target triplet
+#			Name of CPU family/model (eg. x86_64)
+#			The vendor (eg. linux)
+#			Operating system name (eg. gnu)
+__default_target_triplet() {
+	gcc -dumpmachine
 }
 
 
+# LIBRARIES SEARCH PATH -------
+# https://stackoverflow.com/questions/9922949/how-to-print-the-ldlinker-search-path
+
+
+# SEARCH PATH AT RUNTIME - WHILE RUNNING PROGRAM override with LD_LIBRARY_PATH enn var
+
+# dynamic libraries search path at runtime
+# https://github.com/StudioEtrange/lddtree/blob/579ebe449b76ed9d22f116a6f30b87b1f2ded2ca/lddtree.sh#L169
+__default_runtime_search_path() {
+	local c_ldso_paths=
+	if [ "$STELLA_CURRENT_PLATFORM" = "linux" ]; then
+
+		if [ -r /etc/ld.so.conf ] ; then
+			read_ldso_conf() {
+				local line p
+				for p ; do
+					# if the glob didnt match anything #360041,
+					# or the files arent readable, skip it
+					[ -r "${p}" ] || continue
+					while read line ; do
+						case ${line} in
+							"#"*) ;;
+							"include "*) read_ldso_conf ${line#* } ;;
+							*) c_ldso_paths="$c_ldso_paths:/${line#/}";;
+						esac
+					done <"${p}"
+				done
+			}
+			# the 'include' command is relative
+			local _oldpwd="$PWD"
+			cd "/etc" >/dev/null
+			interp=$(__get_elf_interpreter_linux "$(which ls)")
+			echo $interp
+			case "$interp" in
+			*/ld-musl-*)
+				musl_arch=${interp%.so*}
+				musl_arch=${musl_arch##*-}
+				read_ldso_conf /etc/ld-musl-${musl_arch}.path
+				;;
+			*/ld-linux*|*/ld.so*) # glibc
+				read_ldso_conf /etc/ld.so.conf
+				;;
+			esac
+			cd "$_oldpwd"
+		fi
+	fi
+	echo "${c_ldso_paths}"
+}
+
+
+# SEARCH PATH AT LINKING - WHILE BUILDING override with LIBRARY_PATH enn var
+
+# linker search path
+# library search path during linking
+# arch : x64|x86
+#				if empty the default system current arch will be used
+# LINUX https://stackoverflow.com/questions/9922949/how-to-print-the-ldlinker-search-path
+# NOTE ON MACOS :
+#			 https://opensource.apple.com/source/dyld/dyld-519.2.1/src/dyld.cpp.auto.html
+#			 hardcoded values https://opensource.apple.com/source/dyld/dyld-519.2.1/src/dyld.cpp.auto.html
+#												can be checked with : gcc  -Xlinker -v
+__default_linker_search_path() {
+	local __arch="$1"
+	if [ "$STELLA_CURRENT_PLATFORM" = "linux" ]; then
+		[ "$__arch" = "x64" ] && $__arch="-m64"
+		[ "$__arch" = "x86" ] && $__arch="-m32"
+		gcc $__arch -Xlinker --verbose  2>/dev/null | grep SEARCH | sed 's/SEARCH_DIR("=\?\([^"]\+\)"); */\1\n/g'  | grep -vE '^$'
+	fi
+	if [ "$STELLA_CURRENT_PLATFORM" = "darwin" ]; then
+		echo "/usr/local/lib:/usr/lib"
+	fi
+}
+
+
+# gcc hardcoded libraries search path when linking
+# gcc passes a few extra -L paths to the linker, which you can list with the following command:
+# https://stackoverflow.com/a/21610523/5027535
+__gcc_linker_search_path() {
+	if [ "$STELLA_CURRENT_PLATFORM" = "linux" ]; then
+		gcc -print-search-dirs | sed '/^lib/b 1;d;:1;s,/[^/.][^/]*/\.\./,/,;t 1;s,:[^=]*=,:;,;s,;,;  ,g' | tr \; \\012
+	fi
+}
+
+# library search path during linking (-L flag) 
+# NOT AT RUNTIME ==> parse ld.so.conf to see search path at runtime
+# see __default_linker_search_path
+# ld not used on macos
+# https://stackoverflow.com/a/21610523/5027535
+__ld_linker_search_path() {
+	if [ "$STELLA_CURRENT_PLATFORM" = "linux" ]; then
+		ld --verbose 2>/dev/null | grep SEARCH | sed 's/SEARCH_DIR("=\?\([^"]\+\)"); */\1\n/g'  | grep -vE '^$'
+	fi
+}
+
+# pkg-config full search path
+# https://linux.die.net/man/1/pkg-config
+__pkgconfig_search_path() {
+	if $(type pkg-config &>/dev/null); then
+		echo ${PKG_CONFIG_PATH}:$(pkg-config --variable pc_path pkg-config)
+	fi
+}
+
+# NOTE apple-clang-llvm versions are not synchronized with clang-llvm versions
+__clang_version() {
+	clang --version | head -n 1 | grep -o -E "[[:digit:]].[[:digit:]].[[:digit:]]" | head -1
+}
+
+# RUNTIME specific --------------------------------------------------------
+
+# PYTHON VERSION
 # get python version on 1 digits (2, 3, ...)
 __python_major_version() {
-	# 2.7
+	# 2
 	python -c 'import sys;print(str(sys.version_info.major));'
 }
 
@@ -389,32 +486,158 @@ __python_short_version() {
 	python -c 'import sys;print(str(sys.version_info.major) + "." + str(sys.version_info.minor));'
 }
 
-# NOTE python-config symbolic link do not exist on python 3.x
-__python_get_libs() {
+
+# PYTHON PACKAGE INSTALL PATH
+# get python global site-packages path
+# https://stackoverflow.com/a/46071447
+__python_get_site_packages_global_path() {
+	# /Library/Python/2.7/site-packages
+	python -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())"
+}
+
+# get python current user	site-packages path
+# https://stackoverflow.com/a/46071447
+__python_get_site_packages_user_path() {
+	# /Library/Python/2.7/site-packages
+	python -m site --user-site
+}
+
+# get standard python libraries install dir
+__python_get_standard_packages_path() {
+	# /Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7
+	python -c 'import sysconfig;print(sysconfig.get_path("stdlib"));'
+}
+
+
+
+# LIBRARIES INSTALL DIRECTORIES inside python
+# get library install dir within python environment
+__python_get_lib_dir() {
+		python -c 'import sysconfig;print(sysconfig.get_config_var("LIBDIR"));'
+}
+# get include install dir within python environment
+__python_get_include_dir() {
+		python -c 'import sysconfig;print(sysconfig.get_config_var("INCLUDEDIR"));'
+}
+# get binary install dir within python environment
+__python_get_bin_dir() {
+		python -c 'import sysconfig;print(sysconfig.get_config_var("BINDIR"));'
+}
+
+
+# BUILD USE CASE
+# python build functions using python-config for build use case
+# python-config : output  build  options for python C/C++ extensions or embedding
+# http://manpages.ubuntu.com/manpages/xenial/en/man1/i386-linux-gnu-python2.7-config.1.html
+__python_build_get_libs() {
 	# -lpython2.7 -ldl -framework CoreFoundation
 	python$(__python_short_version)-config --libs
 }
-
-__python_get_ldflags() {
+__python_build_get_ldflags() {
 	#-L/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/config -lpython2.7 -ldl -framework CoreFoundation
 	python$(__python_short_version)-config --ldflags
 }
-
-__python_get_clags() {
+__python_build_get_clags() {
 	#-I/Library/Frameworks/Python.framework/Versions/2.7/include/python2.7 -I/Library/Frameworks/Python.framework/Versions/2.7/include/python2.7 -fno-strict-aliasing -fno-common -dynamic -arch i386 -arch x86_64 -g -DNDEBUG -g -fwrapv -O3 -Wall -Wstrict-prototypes
 	python$(__python_short_version)-config --cflags
 }
-
-__python_get_prefix() {
+__python_build_get_prefix() {
 	# /Library/Frameworks/Python.framework/Versions/2.7
 	python$(__python_short_version)-config --prefix
 }
-__python_get_includes() {
+__python_build_get_includes() {
 	#-I/Library/Frameworks/Python.framework/Versions/2.7/include/python2.7 -I/Library/Frameworks/Python.framework/Versions/2.7/include/python2.7
 	python$(__python_short_version)-config --includes
 }
 
+# VARIOUS
+# retrieve current pyconfig.h
+__python_get_pyconfig() {
+	# /Library/Frameworks/Python.framework/Versions/2.7/include/python2.7/pyconfig.h
+	python -c 'import sysconfig;print(sysconfig.get_config_h_filename());'
+}
+
+
+
 # PACKAGE SYSTEM ----------------------------
+# set a global proxy for yum
+# sample : __yum_proxy_set $STELLA_HTTP_PROXY
+__yum_proxy_set() {
+	local _uri="$1"
+
+	__yum_proxy_unset
+
+	__log "INFO" " * Set yum HTTP proxy with $_uri"
+
+	[ ! -f "/etc/yum.conf" ] && echo [main] | sudo -E tee /etc/yum.conf > /dev/null
+	echo proxy=${_uri} | sudo -E tee -a /etc/yum.conf > /dev/null
+}
+
+# unset global proxy for yum
+__yum_proxy_unset() {
+	__log "INFO" " * Unset any yum HTTP proxy"
+
+	[ -f "/etc/yum.conf" ] && sudo sed -i '/proxy=/d' /etc/yum.conf > /dev/null
+}
+
+# set a proxy only for a soecific repo
+# __yum_proxy_set_repo "epel" "$STELLA_HTTP_PROXY"
+__yum_proxy_set_repo() {
+	local _repo_name="$1"
+	local _uri="$2"
+
+	[ "${_uri}" = "" ] && _uri="_none_"
+
+	__log "INFO" " * Set yum HTTP proxy with $_uri for repo ${_repo_name}"
+
+	__sudo_exec yum-config-manager --setopt=${_repo_name}.proxy=${_uri} --save
+}
+
+# unset proxy only for a soecific repo
+# __yum_proxy_set_repo "epel" "$STELLA_HTTP_PROXY"
+__yum_proxy_unset_repo() {
+	local _repo_name="$1"
+	__log "INFO" " * Unset yum HTTP proxy for repo ${_repo_name}"
+
+	__sudo_exec yum-config-manager --setopt=${_repo_name}.proxy=_none_ --save
+}
+
+
+# add epel
+# _version could be 6 or 7 (for RHEL/Centos 6.x or 7.x)
+__yum_add_extra_repositories() {
+	local _version="$1"
+
+	__log "INFO" "Set some yum repositories into current OS ($STELLA_CURRENT_OS)"
+
+	[ ! "$_version" = "6" ] && [ ! "$_version" = "7" ] && return
+
+	# TODO : there yum repositories use a mirroring system, and it do not work every time. Beside EPEL repositories is enough
+	# TODO : remove centos-7-base.repo from pool folder
+	# http://redhat-centos.blogspot.fr/2013/06/configuring-centos-base-repo-for-redhat.html
+	#__log "INFO" "** Set base repositories of Centos"
+	#__sudo_exec cp -f "$STELLA_ARTEFACT/centos-repo/centos-${_version}-base.repo" /etc/yum.repos.d/
+	#__get_resource "gpg key" "http://mirror.centos.org/centos/RPM-GPG-KEY-CentOS-${_version}" "HTTP" "$STELLA_APP_WORK_ROOT" "FORCE_NAME RPM-GPG-KEY-CentOS-${_version}"
+	#__sudo_exec cp -f "$STELLA_APP_WORK_ROOT/RPM-GPG-KEY-CentOS-${_version}" /etc/pki/rpm-gpg/
+
+	# http://www.rackspace.com/knowledge_center/article/install-epel-and-additional-repositories-on-centos-and-red-hat
+	__log "INFO" "** Add EPEL repositories"
+	__get_resource "epel" "https://dl.fedoraproject.org/pub/epel/epel-release-latest-${_version}.noarch.rpm" "HTTP" "$STELLA_APP_WORK_ROOT" "FORCE_NAME epel-release-latest-${_version}.noarch.rpm"
+	__sudo_exec rpm -Uvh "$STELLA_APP_WORK_ROOT/epel-release-latest-${_version}.noarch.rpm"
+
+	__yum_proxy_set_repo "epel" "${STELLA_HTTP_PROXY}"
+	__sudo_exec yum-config-manager --enable epel
+	__sudo_exec yum clean all
+}
+
+
+__yum_remove_extra_repositories() {
+	__log "INFO" "** Disable EPEL repositories"
+
+	__sudo_exec yum-config-manager --disable epel
+	__sudo_exec yum clean all
+}
+
 
 
 __get_current_package_manager() {
@@ -442,17 +665,7 @@ __get_current_package_manager() {
 	echo "$_package_manager"
 }
 
-__sys_install() {
-	# _item package name
-	# other args : optionnal arguments
-	local _item=$1
-	shift
-	__sys_install_$_item $@
-}
 
-__sys_remove() {
-	__sys_remove_$1
-}
 
 
 # use a package manager
@@ -476,31 +689,32 @@ __use_package_manager() {
 	local _packages=
 	for o in $_packages_list; do
 		[ "$o" = "|" ] && _flag_package_manager=OFF
-		[ "$_flag_package_manager" = "ON" ] && _packages="$_packages $o"
+		[ "$_flag_package_manager" = "ON" ] && _packages="${_packages} $o"
+		# NOTE : exception here for "brew-cask", because the package manager name is always just "brew"
+		[ "$o" = "$_package_manager"-cask ] && _flag_package_manager=ON && _package_manager="brew-cask"
 		[ "$o" = "$_package_manager" ] && _flag_package_manager=ON
 	done
+
+	[ "${_packages}" = "" ] && echo " ** WARN : we do not find any configured package for $_id with $_package_manager"
 
 	if [ "$_action" = "INSTALL" ]; then
 		case $_package_manager in
 			apt-get)
-				type sudo &>/dev/null && \
-					sudo -E apt-get update && \
-					sudo -E apt-get -y install $_packages || \
-					apt-get update && \
-					apt-get -y install $_packages
+				__sudo_exec apt-get update
+				__sudo_exec apt-get -y install ${_packages}
 				;;
 			brew)
-				brew install $_packages
+				brew install ${_packages}
+				;;
+			brew-cask)
+				brew cask install ${_packages}
 				;;
 			yum)
-				sudo -E yum install -y $_packages
+				__sudo_exec yum install -y ${_packages}
 				;;
 			apk)
-				type sudo &>/dev/null && \
-					sudo -E apk update && \
-					sudo -E apk add $_packages || \
-					apk update && \
-					apk add $_packages
+				__sudo_exec apk update
+				__sudo_exec apk add ${_packages}
 				;;
 			*)	echo " ** WARN : dont know how to install $_id"
 				;;
@@ -509,34 +723,137 @@ __use_package_manager() {
 	if [ "$_action" = "REMOVE" ]; then
 		case $_package_manager in
 			apt-get)
-				type sudo &>/dev/null && \
-					sudo -E apt-get update && \
-					sudo -E apt-get -y autoremove --purge $_packages || \
-					apt-get update && \
-					apt-get -y autoremove --purge $_packages
+				__sudo_exec apt-get update
+				__sudo_exec apt-get -y autoremove --purge ${_packages}
 				;;
 			brew)
-				brew uninstall $_packages
+				brew uninstall ${_packages}
+				;;
+			brew-cask)
+				brew cask uninstall ${_packages}
 				;;
 			yum)
-				sudo -E yum remove -y $_packages
+				__sudo_exec yum remove -y ${_packages}
 				;;
 			apk)
-					type sudo &>/dev/null && \
-					sudo -E apk del $_packages || \
-					apk del $_packages
+				__sudo_exec apk del ${_packages}
 				;;
 			*)	echo " ** WARN : dont know how to remove $_id"
 				;;
 		esac
 	fi
+
+}
+# ----------- ANSIBLE -----------------------------------------------------
+
+
+# ARG1 playbook yml file
+# ARG2 roles root folder
+# ARG3 inventory file
+# OPTION
+#	LIMIT restrict execution to some host
+#	TAGS execute tasks tagged by one of these tags, separated by comma
+#	PYTHON path to python interpreter
+#	DEBUG enable more debug output
+__ansible_play() {
+	local __playbook="$1"
+	local __roles="$2"
+	local __inventory_file="$3"
+	local __opt="$4"
+
+	local __limit=
+	local __tags=
+	local __python=
+	local __debug="-v"
+	for o in ${__opt}; do
+		[ "$__limit" = "1" ] && __limit="--limit=$o"
+		[ "$o" = "LIMIT" ] && __limit="1"
+		[ "$__tags" = "1" ] && __tags="--tags=$o"
+		[ "$o" = "TAGS" ] && __tags="1"
+		[ "$__python" = "1" ] && __python="-e ansible_python_interpreter=$o"
+		[ "$o" = "PYTHON" ] && __python="1"
+		[ "$o" = "DEBUG" ] && __debug="-vvv"
+	done
+	
+	[ -z $__limit ] && __limit=all
+
+	ANSIBLE_ROLES_PATH="$__roles" PYTHONUNBUFFERED=1 ANSIBLE_FORCE_COLOR=true ansible-playbook --inventory-file="$__inventory_file" $__limit $__debug "$__playbook" $__tags $__python
 }
 
-# --------- SYSTEM RECIPES--------
+# ARG1 playbook yml file
+# ARG2 roles root folder
+# OPTION
+#	TAGS execute tasks tagged by one of these tags, separated by comma
+#	PYTHON path to python interpreter (by default use python found in PATH)
+__ansible_play_localhost() {
+	local __playbook="$1"
+	local __roles="$2"
+	local __opt="$3"
+
+	local __tags=
+	local __python="-e ansible_python_interpreter=$(which python)"
+	local __debug="-v"
+	for o in ${__opt}; do
+		[ "$__tags" = "1" ] && __tags="--tags=$o"
+		[ "$o" = "TAGS" ] && __tags="1"
+		[ "$__python" = "1" ] && __python="-e ansible_python_interpreter=$o"
+		[ "$o" = "PYTHON" ] && __python="1"
+		[ "$o" = "DEBUG" ] && __debug="-vvv"
+	done
+
+	# https://docs.ansible.com/ansible/latest/user_guide/playbooks_variables.html#defining-variables-at-runtime
+	# --extra-vars "version=1.23.45 other_variable=foo"
+	# --extra-vars '{"version":"1.23.45","other_variable":"foo"}'
+	# ansible-playbook arcade.yml --extra-vars "{\"name\":\"Conan O\'Brien\"}"
+	# ansible-playbook arcade.yml --extra-vars '{"name":"Conan O'\\\''Brien"}'
+	# ansible-playbook script.yml --extra-vars "{\"dialog\":\"He said \\\"I just can\'t get enough of those single and double-quotes"\!"\\\"\"}"
+	# EXTRA_VARS=\{\"infra_name\":\"$INFRA_NAME\",\"proxy_name\":\"sesame\"\}
+	#--extra-vars=$EXTRA_VARS
+
+	# use same python interpreter than the one which launch ansible
+	# by default, ansible will lookup python in some default place like /usr/bin/python not in PATH
+	# https://github.com/ansible/ansible/issues/6345
+	ANSIBLE_ROLES_PATH="$__roles" PYTHONUNBUFFERED=1 ANSIBLE_FORCE_COLOR=true ansible-playbook --connection local --inventory 'localhost,' $__debug "$__playbook" $__tags $__python
+
+
+}
+
+#
+# __ansible_play_vagrant() {
+#   INFRA_NAME="$1"
+#   PLAYBOOK="$2"
+#   LIMIT="$3"
+#   [ -z $LIMIT ] && LIMIT=all
+#
+#   ANSIBLE_INVENTORY_FILE=$STELLA_APP_ROOT/infra/$INFRA_NAME/.vagrant/provisioners/ansible/inventory
+#   ANSIBLE_PLAYBOOK=$STELLA_APP_ROOT/infra/playbook/$PLAYBOOK.yml
+#
+#   ANSIBLE_EXTRA_VARS=\{\"infra_name\":\"$INFRA_NAME\",\"proxy_name\":\"sesame\"\}
+#   ANSIBLE_ROLES_PATH=$STELLA_APP_ROOT/infra/roles PYTHONUNBUFFERED=1 ANSIBLE_FORCE_COLOR=true ANSIBLE_HOST_KEY_CHECKING=false ANSIBLE_SSH_ARGS='-o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes -o ControlMaster=auto -o ControlPersist=60s' ansible-playbook --connection=ssh --timeout=30 --inventory-file=$ANSIBLE_INVENTORY_FILE --limit=$LIMIT --extra-vars=$ANSIBLE_EXTRA_VARS -v $ANSIBLE_PLAYBOOK
+# }
+
+
+# --------- SYSTEM INSTALL/REMOVE RECIPES------------------------------------
+__sys_install() {
+	# _item package name
+	# other args : optionnal arguments
+	local _item=$1
+	shift
+	__sys_install_$_item $@
+}
+
+__sys_remove() {
+	__sys_remove_$1
+}
+
 __sys_install_docker() {
 	# NOTE install with ansible : https://medium.com/@tedchength/installing-docker-using-ansible-script-c182787f2fa1
 	# NOTE install specific version : https://forums.docker.com/t/how-can-i-install-a-specific-version-of-the-docker-engine/1993/6
 	#																	http://www.hashjoin.com/t/upgrade-docker-engine-specific-version.html
+	#																	https://github.com/StudioEtrange/install-docker
+	# NOTE dockerd service is not always auto started
+	#					sudo systemctl enable docker
+	#					sudo systemctl start docker
 	local _version=$1
 	echo " ** Install Docker $_version on your system"
 	if [ "$STELLA_CURRENT_OS" = "macos" ]; then
@@ -558,8 +875,21 @@ __sys_install_docker() {
 	echo "			sudo usermod -aG docker USER"
 }
 
+
+# NOTE: The following new directories will be created:
+# /usr/local/etc
+# /usr/local/sbin
+# /usr/local/var
+# /usr/local/opt
+# /usr/local/var/homebrew
+# /usr/local/var/homebrew/linked
+# /usr/local/Cellar
+# /usr/local/Caskroom
+# /usr/local/Homebrew
+# /usr/local/Frameworks
 __sys_install_brew() {
 	echo " ** Install Homebrew on your system"
+	echo " ** As of December 2015, Cask comes installed with Homebrew"
 
 	__download "https://raw.githubusercontent.com/Homebrew/install/master/install" "brew-install.rb" "$STELLA_APP_TEMP_DIR"
 
@@ -632,17 +962,15 @@ __sys_remove_build-chain-standard() {
 	else
 		__use_package_manager "REMOVE" "build-chain-standard" "apt-get build-essential gcc-multilib g++-multilib | yum gcc gcc-c++ make kernel-devel | apk gcc g++ make"
 	fi
-
 }
 
 
-
+# recipes using system package manager ------------------
 __sys_install_x11() {
-	brew install caskroom/cask/brew-cask
-	brew cask install xquartz
+	__use_package_manager "INSTALL" "x11" "brew-cask xquartz"
 }
 __sys_remove_x11() {
-	brew cask uninstall xquartz
+	__use_package_manager "REMOVE" "x11" "brew-cask xquartz"
 }
 
 __sys_install_sevenzip() {

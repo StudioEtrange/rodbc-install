@@ -1,4 +1,4 @@
-#!sh
+#!/usr/bin/env bash
 if [ ! "$_STELLA_COMMON_BUILD_INCLUDED_" = "1" ]; then
 _STELLA_COMMON_BUILD_INCLUDED_=1
 
@@ -206,9 +206,14 @@ __prepare_build() {
 	echo "====> Build arch directive : $STELLA_BUILD_ARCH"
 	echo "====> Parallelized (if supported) : $STELLA_BUILD_PARALLELIZE"
 	echo " (soon DEPRECATED) Relocatable : $STELLA_BUILD_RELOCATE"
+	echo "** LINKED LIB"
 	echo "====> Feature link path mode : $STELLA_FEATURE_LINK_PATH"
 	echo "====> Build Link path mode : $STELLA_BUILD_LINK_PATH"
-	echo "====> Linked lib from stella features : $STELLA_LINKED_LIBS_LIST"
+	echo "====> Linked libs from stella features : $STELLA_LINKED_LIBS_LIST"
+	echo "====> Linked libs from system : $STELLA_LINKED_LIBS_SYSTEM_LIST"
+	echo "====> pkg-config tool : $(which pkg-config)"
+	echo "====> env PKG_CONFIG_PATH (additional search path for pkg-config): $PKG_CONFIG_PATH"
+	echo "====> pkg-config full search path : $(__pkgconfig_search_path)"
 	echo "** FOLDERS"
 	echo "====> Install directory : $INSTALL_DIR"
 	echo "====> Source directory : $SOURCE_DIR"
@@ -226,7 +231,7 @@ __prepare_build() {
 	echo "====> LIBRARY_PATH (search path at link time) : $LIBRARY_PATH"
 	echo "====> LD_LIBRARY_PATH (search path at run time linux): $LD_LIBRARY_PATH"
 	echo "====> DYLD_LIBRARY_PATH (search path at run time darwin): $DYLD_LIBRARY_PATH"
-	echo "====> PKG_CONFIG_PATH (search path for pkg-config): $PKG_CONFIG_PATH"
+
 
 }
 
@@ -253,6 +258,8 @@ __auto_build() {
 	# NO_OUT_OF_TREE_BUILD
 	# NO_INSPECT
 	# NO_INSTALL
+	# NO_FIX
+	# NO_CHECK
 	# POST_BUILD_STEP
 	# INCLUDE_FILTER <expr> -- include these files for inspect and fix
 	# EXCLUDE_FILTER <expr> -- exclude these files for inspect and fix
@@ -268,15 +275,12 @@ __auto_build() {
 	local _opt_build=ON
 	# build from another folder (default : TRUE)
 	local _opt_out_of_tree_build=ON
-	# disable fix & check build (default : ON)
-	local _opt_inspect_and_fix_build=ON
 	for o in $OPT; do
 		[ "$o" = "SOURCE_KEEP" ] && _opt_source_keep=ON
 		[ "$o" = "BUILD_KEEP" ] && _opt_build_keep=ON
 		[ "$o" = "NO_CONFIG" ] && _opt_configure=OFF
 		[ "$o" = "NO_BUILD" ] && _opt_build=OFF
 		[ "$o" = "NO_OUT_OF_TREE_BUILD" ] && _opt_out_of_tree_build=OFF
-		[ "$o" = "NO_INSPECT" ] && _opt_inspect_and_fix_build=OFF
 	done
 
 	# can not build out of tree without configure first
@@ -323,7 +327,7 @@ __auto_build() {
 		[ ! "$_opt_build_keep" = "ON" ] && rm -Rf "$BUILD_DIR"
 	fi
 
-	[ "$_opt_inspect_and_fix_build" = "ON" ] && __inspect_and_fix_build "$INSTALL_DIR" "$OPT"
+	__inspect_and_fix_build "$INSTALL_DIR" "$OPT"
 
 	__disable_current_toolset
 	echo " ** Done"
@@ -358,12 +362,13 @@ __launch_configure() {
 	cd "$AUTO_BUILD_DIR"
 
 	if [ "$_opt_autotools" = "ON" ]; then
+		echo "** Using Autotools : ${_autotools}"
 		case $_autotools in
 			bootstrap)
-				[ -f "$AUTO_SOURCE_DIR/bootstrap" ] && "$AUTO_SOURCE_DIR/bootstrap"
+				[ -f "$AUTO_SOURCE_DIR/bootstrap" ] && "$AUTO_SOURCE_DIR/bootstrap" || echo "** WARN : bootstrap not found or error"
 			;;
 			autogen)
-				[ -f "$AUTO_SOURCE_DIR/autogen.sh" ] && "$AUTO_SOURCE_DIR/autogen.sh"
+				[ -f "$AUTO_SOURCE_DIR/autogen.sh" ] && "$AUTO_SOURCE_DIR/autogen.sh" || echo "** WARN : autogen not found or error"
 			;;
 			autoreconf)
 				autoreconf --force --verbose --install $AUTO_SOURCE_DIR
@@ -455,7 +460,7 @@ __launch_build() {
 		[ "$o" = "DEBUG" ] && _debug=ON && _flag_opt_post_build_step=OFF
 		[ "$o" = "NO_CONFIG" ] && _opt_configure=OFF && _flag_opt_post_build_step=OFF
 		[ "$o" = "NO_INSTALL" ] && _opt_install=OFF && _flag_opt_post_build_step=OFF
-		[ "$_flag_opt_post_build_step" = "ON" ] && _post_build_step="$o $_post_build_step"
+		[ "$_flag_opt_post_build_step" = "ON" ] && _post_build_step="$_post_build_step $o"
 		[ "$o" = "POST_BUILD_STEP" ] && _flag_opt_post_build_step=ON
 	done
 
@@ -611,6 +616,7 @@ __reset_build_env() {
 
 	# LINKED LIBRARIES
 	STELLA_LINKED_LIBS_LIST=
+	STELLA_LINKED_LIBS_SYSTEM_LIST=
 	STELLA_LINKED_LIBS_C_CXX_FLAGS=
 	STELLA_LINKED_LIBS_CPP_FLAGS=
 	STELLA_LINKED_LIBS_LINK_FLAGS=
@@ -759,17 +765,35 @@ __inspect_and_fix_build() {
 	local path="$1"
 	local OPT="$2"
 	local _result=0
-
+	local o=
 	# INCLUDE_LINKED_LIB <expr> -- include these linked libs
 	# EXCLUDE_LINKED_LIB <expr> -- exclude these linked libs
 	# INCLUDE_LINKED_LIB is apply first, before EXCLUDE_LINKED_LIB
 	# INCLUDE_FILTER <expr> -- include these files
 	# EXCLUDE_FILTER <expr> -- exclude these files
 	# INCLUDE_FILTER is apply first, before EXCLUDE_FILTER
+	# NO_FIX do not fix files
+	# NO_CHECK do not check files
 
 	[ "$1" = "" ] && return
 
+	# fix files (default : ON)
+	local _opt_fix_files=ON
+	# check build (default : ON)
+	local _opt_check_files=ON
+	for o in $OPT; do
+		[ "$o" = "NO_FIX" ] && _opt_fix_files=OFF
+		[ "$o" = "NO_CHECK" ] && _opt_check_files=OFF
+	done
+
+	# nothing to do
+	if [ "${_opt_fix_files}" = "OFF" ]; then
+		[ "${_opt_check_files}" = "OFF" ] && return
+	fi
+
+
 	[ -z "$(__filter_list "$path/*" "INCLUDE_TAG INCLUDE_FILTER EXCLUDE_TAG EXCLUDE_FILTER $OPT")" ] && return $_result
+
 
 
 	local f=
@@ -781,9 +805,11 @@ __inspect_and_fix_build() {
 
 	if [ -f "$path" ]; then
 		# fixing built files
-		__fix_built_files "$path" "$OPT"
+		[ "${_opt_fix_files}" = "ON" ] && __fix_built_files "$path" "$OPT"
 		# checking built files
-		__check_built_files "$path" "$OPT" || _result=1
+		if [ "${_opt_check_files}" = "ON" ]; then
+			__check_built_files "$path" "$OPT" || _result=1
+		fi
 	fi
 
 	return $_result

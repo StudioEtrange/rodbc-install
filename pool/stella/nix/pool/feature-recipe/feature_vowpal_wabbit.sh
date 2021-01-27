@@ -15,7 +15,7 @@ feature_vowpal_wabbit_8_2_0() {
 	FEAT_VERSION=8_2_0
 
 	#  boost +no_single +no_static +openmpi +python27
-	FEAT_SOURCE_DEPENDENCIES="zlib#1_2_8 boost#1_61_0 openmpi#1_10_3 FORCE_ORIGIN_SYSTEM python"
+	FEAT_SOURCE_DEPENDENCIES="zlib#^1_2 boost#1_61_0 openmpi#1_10_3 FORCE_ORIGIN_SYSTEM python"
 	FEAT_BINARY_DEPENDENCIES=
 
 	FEAT_SOURCE_URL=https://github.com/JohnLangford/vowpal_wabbit/archive/8.2.0.tar.gz
@@ -38,7 +38,7 @@ feature_vowpal_wabbit_8_2_0() {
 
 feature_vowpal_wabbit_link() {
 	__link_feature_library "openmpi#1_10_3"
-	__link_feature_library "zlib#1_2_8" "GET_FOLDER _zlib NO_SET_FLAGS LIBS_NAME z"
+	__link_feature_library "zlib#^1_2" "GET_FOLDER _zlib NO_SET_FLAGS LIBS_NAME z"
 	__link_feature_library "boost#1_61_0" "NO_SET_FLAGS"
 }
 
@@ -63,7 +63,7 @@ feature_vowpal_wabbit_install_source() {
 	AUTO_INSTALL_BUILD_FLAG_PREFIX=
 	AUTO_INSTALL_BUILD_FLAG_POSTFIX=
 
-	__auto_build "$FEAT_NAME" "$SRC_DIR" "$INSTALL_DIR" "SOURCE_KEEP NO_OUT_OF_TREE_BUILD POST_BUILD_STEP test install"
+	__auto_build "$FEAT_NAME" "$SRC_DIR" "$INSTALL_DIR" "SOURCE_KEEP NO_OUT_OF_TREE_BUILD POST_BUILD_STEP install test"
 
 	__copy_folder_content_into "$SRC_DIR/python" "$INSTALL_DIR/samples/python"
 	__copy_folder_content_into "$SRC_DIR/R" "$INSTALL_DIR/samples/R"

@@ -78,6 +78,9 @@ STELLA_DIST_URL="$STELLA_URL/dist"
 #shellcheck source=nix/common/common-boot.sh
 . $STELLA_COMMON/common-boot.sh
 
+# STELLA ARTEFACT INCLUDE ---------------------------------------------
+
+. $STELLA_ARTEFACT/bash_ini_parser/read_ini.sh
 
 # LOG ---------------------------
 # Before include stella-link.sh, you can override log state
@@ -96,15 +99,34 @@ __set_current_platform_info
 # Before include stella-link.sh, you can override file properties file
 # 	STELLA_APP_PROPERTIES_FILENAME="foo.properties" ==> change properties name
 [ "$STELLA_APP_PROPERTIES_FILENAME" = "" ] && STELLA_APP_PROPERTIES_FILENAME="stella.properties"
-STELLA_APP_NAME=
+
+# define if current app is stella itself
+STELLA_APP_IS_STELLA=0
 
 # default app root folder is stella root folder
-[ "$STELLA_APP_ROOT" = "" ] && STELLA_APP_ROOT="$STELLA_ROOT"
+if [ "$STELLA_APP_ROOT" = "" ]; then
+	# STELLA_APP_ROOT is define in stella-link file
+	STELLA_APP_ROOT="$STELLA_ROOT"
+	STELLA_APP_IS_STELLA=1
+	STELLA_APP_NAME=stella
+else
+	STELLA_APP_NAME=
+	_STELLA_APP_PROPERTIES_FILE="$(__select_app $STELLA_APP_ROOT)"
+	__get_all_properties $_STELLA_APP_PROPERTIES_FILE
 
-_STELLA_APP_PROPERTIES_FILE="$(__select_app $STELLA_APP_ROOT)"
-__get_all_properties $_STELLA_APP_PROPERTIES_FILE
+	[ "$STELLA_APP_NAME" = "" ] && STELLA_APP_NAME=default-app
+fi
 
-[ "$STELLA_APP_NAME" = "" ] && STELLA_APP_NAME=stella
+
+# you can override STELLA_ARGPARSE_GETOPT in properties file
+# STELLA_ARGPARSE_GETOPT : getopt command instead of "getopt"
+# STELLA_ARGPARSE_GETOPT_DEFAULT is the default value depending of the current platform (defined in common-platform.sh)
+# <command> | PURE_BASH
+if [ "$STELLA_ARGPARSE_GETOPT" = "" ]; then
+	STELLA_ARGPARSE_GETOPT=$STELLA_ARGPARSE_GETOPT_DEFAULT
+fi
+
+
 
 # APP PATH ---------------------------------------------
 STELLA_APP_ROOT=$(__rel_to_abs_path "$STELLA_APP_ROOT" "$STELLA_CURRENT_RUNNING_DIR")
@@ -148,6 +170,7 @@ fi
 
 # OTHERS ---------------------------------------------
 FEATURE_LIST_ENABLED=
+FEATURE_LIST_ENABLED_VISIBLE=
 STELLA_DEFAULT_NO_PROXY="localhost,127.0.0.1,localaddress,.localdomain.com"
 
 
@@ -156,25 +179,16 @@ __STELLA_FEATURE_LIST=
 __STELLA_FEATURE_LIST_STABLE=
 __STELLA_FEATURE_LIST_EXP=
 
-for recipe in "$STELLA_FEATURE_RECIPE"/*.sh; do
-	recipe=$(basename "$recipe")
-	recipe=${recipe#feature_}
-	recipe=${recipe%.sh}
-	__STELLA_FEATURE_LIST_STABLE="$__STELLA_FEATURE_LIST_STABLE $recipe"
-done
-for recipe in "$STELLA_FEATURE_RECIPE_EXPERIMENTAL"/*.sh; do
-	recipe=$(basename "$recipe")
-	recipe=${recipe#feature_}
-	recipe=${recipe%.sh}
-	__STELLA_FEATURE_LIST_EXP="$__STELLA_FEATURE_LIST_EXP $recipe"
-done
-__STELLA_FEATURE_LIST="$__STELLA_FEATURE_LIST_STABLE $__STELLA_FEATURE_LIST_EXP"
+# add standard repo
+__feature_add_repo "$STELLA_FEATURE_RECIPE" "__STELLA_FEATURE_LIST_STABLE"
+# add experimental repo
+__feature_add_repo "$STELLA_FEATURE_RECIPE_EXPERIMENTAL" "__STELLA_FEATURE_LIST_EXP"
 
 # Before include stella-link.sh
 # 	STELLA_FEATURE_RECIPE_EXTRA=/foo/recipe ==> add a recipe folder
 __STELLA_FEATURE_LIST_EXTRA=
 if [ ! "$STELLA_FEATURE_RECIPE_EXTRA" = "" ]; then
-	__feature_add_repo "$STELLA_FEATURE_RECIPE_EXTRA"
+	__feature_add_repo "$STELLA_FEATURE_RECIPE_EXTRA" "__STELLA_FEATURE_LIST_EXTRA"
 fi
 
 
@@ -243,21 +257,26 @@ STELLA_BINARY_DEFAULT_LIB_IGNORED='^/System/Library|^/usr/lib|^/lib'
 
 
 # API ---------------------------------------------
-STELLA_API_COMMON_PUBLIC="uri_parse find_folder_up get_active_path uncompress daemonize rel_to_abs_path is_abs argparse get_filename_from_string \
+STELLA_API_COMMON_PUBLIC="crontab_add crontab_remove filter_version_list string_contains htpasswd_md5 htpasswd_sha1 htpasswd_crypt list_contains filter_list_with_list is_dir_empty list_filter_duplicate abs_to_rel_path symlink_abs_to_rel_path random_number_list_from_range format_table generate_machine_id sha256 is_logical_equalpath is_logical_subpath sort_version transfer_stella filter_list uri_build_path uri_get_path uri_parse find_folder_up get_active_path uncompress daemonize rel_to_abs_path is_abs argparse get_filename_from_string \
 get_resource delete_resource update_resource revert_resource download_uncompress copy_folder_content_into del_folder \
-get_key add_key del_key mercurial_project_version git_project_version get_stella_version \
-make_sevenzip_sfx_bin make_targz_sfx_shell compress trim transfert_stella transfert_folder_rsync transfert_file_rsync"
+get_key get_keys add_key del_key mercurial_project_version git_project_version get_stella_version \
+make_sevenzip_sfx_bin make_targz_sfx_shell compress trim transfer_stella transfer_folder_rsync transfer_file_rsync md5"
 STELLA_API_API_PUBLIC="api_connect api_disconnect"
-STELLA_API_APP_PUBLIC="get_app_property link_app get_data get_assets get_data_pack get_assets_pack delete_data delete_assets delete_data_pack delete_assets_pack update_data update_assets revert_data revert_assets update_data_pack update_assets_pack revert_data_pack revert_assets_pack get_feature get_features"
+STELLA_API_APP_PUBLIC="transfer_app get_app_property link_app get_data get_assets get_data_pack get_assets_pack delete_data delete_assets delete_data_pack delete_assets_pack update_data update_assets revert_data revert_assets update_data_pack update_assets_pack revert_data_pack revert_assets_pack get_feature get_features"
 STELLA_API_FEATURE_PUBLIC="feature_add_repo feature_info list_feature_version feature_remove feature_catalog_info feature_install feature_install_list feature_init list_active_features feature_reinit_installed feature_inspect"
 STELLA_API_BINARY_PUBLIC="tweak_linked_lib get_rpath add_rpath check_rpath check_binary_file tweak_binary_file"
 STELLA_API_BUILD_PUBLIC="toolset_info set_toolset start_build_session set_build_mode auto_build"
-STELLA_API_PLATFORM_PUBLIC="python_get_libs python_get_includes python_get_ldflags python_get_clags python_get_prefix python_major_version python_short_version sys_install sys_remove require"
-STELLA_API_NETWORK_PUBLIC="proxy_tunnel enable_proxy disable_proxy no_proxy_for register_proxy register_no_proxy"
-STELLA_API_BOOT_PUBLIC="boot_shell boot_cmd boot_script"
+STELLA_API_PLATFORM_PUBLIC="ansible_play ansible_play_localhost python_get_lib_dir python_get_include_dir python_get_bin_dir python_get_site_packages_global_path python_get_site_packages_user_path python_get_standard_packages_path yum_proxy_unset yum_proxy_unset_repo yum_proxy_set yum_proxy_set_repo yum_add_extra_repositories yum_remove_extra_repositories python_build_get_libs python_build_get_includes python_build_get_ldflags python_build_get_clags python_build_get_prefix python_major_version python_short_version sys_install sys_remove require"
+STELLA_API_NETWORK_PUBLIC="find_free_port get_ip_external check_tcp_port_open ssh_execute get_ip_from_hostname get_ip_from_interface proxy_tunnel enable_proxy disable_proxy no_proxy_for register_proxy register_no_proxy"
+STELLA_API_BOOT_PUBLIC="boot_stella_shell boot_stella_cmd boot_stella_script boot_app_shell boot_app_cmd boot_app_script"
 STELLA_API_LOG_PUBLIC="log set_log_level set_log_state"
 
-STELLA_API_RETURN_FUNCTION="log find_folder_up python_major_version python_short_version list_feature_version get_active_path rel_to_abs_path trim is_abs mercurial_project_version git_project_version get_stella_version list_active_features get_filename_from_string get_key"
+# SAMPLE : to test a function that return an exit code :
+# 		if $($STELLA_API "is_dir_empty" "/bin"); then
+# 			echo empty
+# 		else
+# 			echo non empty
+# 		fi
 STELLA_API=__api_proxy
 
 
