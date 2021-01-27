@@ -10,15 +10,23 @@ usage() {
 	echo "             Default is $(Rscript --vanilla -e 'cat(.libPaths()[1])')"
 	echo
 	echo " -h|--help : show help"
+	echo " choose versions through environment variables :" 
+	echo "             RODBC_VERSION=1.3-13 UNIXODBC_VERSION=2_3_4 $0 [<path>]"
 }
 
-[ "$1" == "-h" ] && usage && exit
-[ "$1" == "--help" ] && usage && exit
+[ "$1" = "-h" ] && usage && exit
+[ "$1" = "--help" ] && usage && exit
+
+# default versions
+# available versions : https://github.com/cran/RODBC/releases
+RODBC_VERSION="${RODBC_VERSION:-1.3-13}"
+# available versions : https://github.com/StudioEtrange/stella/blob/stable/nix/pool/feature-recipe/feature_unixodbc.sh
+UNIXODBC_VERSION="${UNIXODBC_VERSION:-2_3_4}"
 
 
 # Check R Install
 type Rscript &> /dev/null || _result=1
-if [ "$_result" == "1" ]; then
+if [ "$_result" = "1" ]; then
 	echo "ERROR : Rscript not found. Please install R/Rscript on your system"
 	exit $_result
 fi
@@ -43,21 +51,21 @@ echo "======> Installing RODBC package into $LOCAL_R_REPO <======"
 # unixODBC
 echo "-*--*-** Install unixODBC **-*--*-"
 #rm -Rf "$INSTALL_ROOT/unixodbc"
-$STELLA_API feature_install "unixodbc#2_3_4" "EXPORT $INSTALL_ROOT"
+$STELLA_API feature_install "unixodbc#${UNIXODBC_VERSION}" "EXPORT $INSTALL_ROOT"
 
 
 # Install Package RODBC
 echo "-*--*-** Install RODBC **-*--*-"
 # download RODBC source
-$STELLA_API get_resource "RODBC" "https://cran.r-project.org/src/contrib/RODBC_1.3-13.tar.gz" "HTTP_ZIP" "$STELLA_APP_WORK_ROOT"
+$STELLA_API get_resource "RODBC" "https://cran.r-project.org/src/contrib/RODBC_${RODBC_VERSION}.tar.gz" "HTTP_ZIP" "$STELLA_APP_WORK_ROOT"
 # patch RODBC.c
 sed -i".bak" 's/include <config.h>/include "config.h"/' $STELLA_APP_WORK_ROOT/RODBC/src/RODBC.c
 
 # build RODBC
 # MAKEFLAGS are use with R CMD
 # see R CMD config
-#MAKEFLAGS="LDFLAGS=-L$INSTALL_ROOT/unixodbc/2_3_4/lib" DYLD_LIBRARY_PATH="$INSTALL_ROOT/unixodbc/2_3_4/lib"
-MAKEFLAGS="LDFLAGS=-L$INSTALL_ROOT/unixodbc/2_3_4/lib" R CMD INSTALL -l $LOCAL_R_REPO --configure-args="--with-odbc-manager=odbc --with-odbc-include=$INSTALL_ROOT/unixodbc/2_3_4/include --with-odbc-lib=$INSTALL_ROOT/unixodbc/2_3_4/lib" $STELLA_APP_WORK_ROOT/RODBC/
+#MAKEFLAGS="LDFLAGS=-L$INSTALL_ROOT/unixodbc/$UNIXODBC_VERSION/lib" DYLD_LIBRARY_PATH="$INSTALL_ROOT/unixodbc/$UNIXODBC_VERSION/lib"
+MAKEFLAGS="LDFLAGS=-L$INSTALL_ROOT/unixodbc/$UNIXODBC_VERSION/lib" R CMD INSTALL -l $LOCAL_R_REPO --configure-args="--with-odbc-manager=odbc --with-odbc-include=$INSTALL_ROOT/unixodbc/$UNIXODBC_VERSION/include --with-odbc-lib=$INSTALL_ROOT/unixodbc/$UNIXODBC_VERSION/lib" $STELLA_APP_WORK_ROOT/RODBC/
 
 # Check built package
 $STELLA_API check_binary_file "$INSTALL_ROOT/RODBC"
