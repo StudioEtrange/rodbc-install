@@ -52,7 +52,7 @@ echo "======> Installing RODBC package into $LOCAL_R_REPO <======"
 # unixODBC
 echo "-*--*-** Install unixODBC **-*--*-"
 #rm -Rf "$INSTALL_ROOT/unixodbc"
-$STELLA_API feature_install "unixodbc#${UNIXODBC_VERSION}" "EXPORT $INSTALL_ROOT"
+$STELLA_API feature_install "unixodbc#${UNIXODBC_VERSION}" "EXPORT $INSTALL_ROOT/unixodbc"
 
 
 # Install Package RODBC
@@ -65,8 +65,8 @@ sed -i".bak" 's/include <config.h>/include "config.h"/' $STELLA_APP_WORK_ROOT/RO
 # build RODBC
 # MAKEFLAGS are use with R CMD
 # see R CMD config
-#MAKEFLAGS="LDFLAGS=-L$INSTALL_ROOT/unixodbc/$UNIXODBC_VERSION/lib" DYLD_LIBRARY_PATH="$INSTALL_ROOT/unixodbc/$UNIXODBC_VERSION/lib"
-MAKEFLAGS="LDFLAGS=-L$INSTALL_ROOT/unixodbc/$UNIXODBC_VERSION/lib" R CMD INSTALL -l $LOCAL_R_REPO --configure-args="--with-odbc-manager=odbc --with-odbc-include=$INSTALL_ROOT/unixodbc/$UNIXODBC_VERSION/include --with-odbc-lib=$INSTALL_ROOT/unixodbc/$UNIXODBC_VERSION/lib" $STELLA_APP_WORK_ROOT/RODBC/
+#MAKEFLAGS="LDFLAGS=-L$INSTALL_ROOT/unixodbc/lib" DYLD_LIBRARY_PATH="$INSTALL_ROOT/unixodbc/lib"
+MAKEFLAGS="LDFLAGS=-L$INSTALL_ROOT/unixodbc/lib" R CMD INSTALL -l $LOCAL_R_REPO --configure-args="--with-odbc-manager=odbc --with-odbc-include=$INSTALL_ROOT/unixodbc/include --with-odbc-lib=$INSTALL_ROOT/unixodbc/lib" $STELLA_APP_WORK_ROOT/RODBC/
 
 # Check built package
 $STELLA_API check_binary_file "$INSTALL_ROOT/RODBC"
