@@ -6,8 +6,8 @@ source $_CURRENT_FILE_DIR/stella-link.sh include
 usage() {
 	echo "** Build & Install RODBC package"
 	echo "$0 [<path>] [-h|--help]"
-	echo " <path>    : path where to install RODBC package and its dependencies."
-	echo "             Default is $(Rscript --vanilla -e 'cat(.libPaths()[1])')"
+	echo " <path>    : path where to install RODBC package and its dependency (unixodbc)."
+	echo "             Default is R lib folder : $(Rscript --vanilla -e 'cat(.libPaths()[1])')"
 	echo
 	echo " -h|--help : show help"
 	echo " choose versions through environment variables :" 

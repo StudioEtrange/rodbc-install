@@ -9,7 +9,7 @@ _For ROracle see roracle-install https://github.com/StudioEtrange/roracle-instal
 
 * R should be present on system
 * Standard build tools
-* HTTP should work to download R packages - so set http_proxy env var if needed
+* HTTP should work to download R packages
 
 ## Install
 
@@ -21,7 +21,7 @@ _For ROracle see roracle-install https://github.com/StudioEtrange/roracle-instal
 
 	./install.sh [<path>]
 
-NOTE : Default install path is R Packages default path.
+NOTE : Default install path is R Packages default path. Inside path, RODBC and its dependencies will be installed.
 
 ### OPTIONAL : Choose versions
 
@@ -33,6 +33,9 @@ NOTE : Default install path is R Packages default path.
 
 _NOTE : This script will test if build tools are installed on your system and will try to install them. You should bypass this step and install build tools by yourself if needed_
 
+## Dependencies
+
+RODBC package have unixodbc library has dependency
 
 ## Usage of RODBC
 
