@@ -36,6 +36,7 @@ INSTALL_ROOT="$1"
 if [ -z "$INSTALL_ROOT" ]; then
 	# determine default package directory
 	INSTALL_ROOT="$(Rscript --vanilla -e 'cat(.libPaths()[1])')"
+	__default_install_root_used="1"
 fi
 INSTALL_ROOT="$($STELLA_API rel_to_abs_path "$INSTALL_ROOT" $_CURRENT_RUNNING_DIR)"
 mkdir -p "$INSTALL_ROOT"
@@ -72,6 +73,7 @@ $STELLA_API check_binary_file "$INSTALL_ROOT/RODBC"
 
 # Test Package RODBC
 echo "-*--*-** Testing RODBC **-*--*-"
+[ "$__default_install_root_used" = "" ] && export LOCAL_R_REPO=$INSTALL_ROOT
 Rscript "$STELLA_APP_ROOT/test.R"
 
 

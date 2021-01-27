@@ -48,7 +48,7 @@ You can use it within your R script
 
 And then call this R script from a shell (for example)
 
-	export LOCAL_R_REPO=/path/to/rpackage/install/folder
+	export LOCAL_R_REPO=<path>
 	Rscript my_script.R
 
 ## Note on Stella
