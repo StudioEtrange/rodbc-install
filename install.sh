@@ -65,8 +65,17 @@ sed -i".bak" 's/include <config.h>/include "config.h"/' $STELLA_APP_WORK_ROOT/RO
 # build RODBC
 # MAKEFLAGS are use with R CMD
 # see R CMD config
-#MAKEFLAGS="LDFLAGS=-L$INSTALL_ROOT/unixodbc/lib" DYLD_LIBRARY_PATH="$INSTALL_ROOT/unixodbc/lib"
-MAKEFLAGS="LDFLAGS=-L$INSTALL_ROOT/unixodbc/lib" R CMD INSTALL -l $LOCAL_R_REPO --configure-args="--with-odbc-manager=odbc --with-odbc-include=$INSTALL_ROOT/unixodbc/include --with-odbc-lib=$INSTALL_ROOT/unixodbc/lib" $STELLA_APP_WORK_ROOT/RODBC/
+case $STELLA_CURRENT_PLATFORM in
+	linux )
+	# embedding unixodbc absolute path to find it at each RODBC usage without setting LD_LIBRARY_PATH
+	LD_LIBRARY_PATH="$INSTALL_ROOT/unixodbc/lib:$LD_LIBRARY_PATH" MAKEFLAGS="LDFLAGS=\"-L$INSTALL_ROOT/unixodbc/lib -Wl,-rpath=$INSTALL_ROOT/unixodbc/lib\"" R CMD INSTALL -l $LOCAL_R_REPO --configure-args="--with-odbc-manager=odbc --with-odbc-include=$INSTALL_ROOT/unixodbc/include --with-odbc-lib=$INSTALL_ROOT/unixodbc/lib" $STELLA_APP_WORK_ROOT/RODBC/
+	;;
+	darwin )
+	# https://wincent.com/wiki/@executable_path,_@load_path_and_@rpath
+	# we do not embed any relative rpath in macos : if we do not specify anything the install_names of unixodbc lib (=its absolute path) will be embedded into RODBC lib
+	DYLD_LIBRARY_PATH="$INSTALL_ROOT/unixodbc/lib:$DYLD_LIBRARY_PATH" MAKEFLAGS="LDFLAGS=\"-L$INSTALL_ROOT/unixodbc/lib\"" R CMD INSTALL -l $LOCAL_R_REPO --configure-args="--with-odbc-manager=odbc --with-odbc-include=$INSTALL_ROOT/unixodbc/include --with-odbc-lib=$INSTALL_ROOT/unixodbc/lib" $STELLA_APP_WORK_ROOT/RODBC/
+	;;
+esac
 
 # Check built package
 $STELLA_API check_binary_file "$INSTALL_ROOT/RODBC"
