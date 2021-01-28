@@ -25,6 +25,8 @@ NOTE : Default install path is R Packages default path. Inside path, RODBC and i
 
 ### OPTIONAL : Choose versions
 
+Available unixODBC versions see : https://github.com/StudioEtrange/stella/blob/stable/nix/pool/feature-recipe/feature_unixodbc.sh
+
 	RODBC_VERSION="1.3-13" UNIXODBC_VERSION="2_3_4" ./install.sh [<path>]
 
 ### OPTIONAL : Install build tools
@@ -58,6 +60,6 @@ And then call this R script from a shell (for example)
 
 ## Usefull Links
 
-* http://carlo-hamalainen.net/blog/2012/5/11/r-makeflags-rpath-and-building-packages
+* https://carlo-hamalainen.net/2012/05/11/r-makeflags-rpath-and-building-packages/
 * http://hiltmon.com/blog/2013/09/18/setup-odbc-for-r-on-os-x/
 * http://stackoverflow.com/questions/26210317/installation-of-rodbc-roracle-packages-on-os-x-mavericks/26219189#26219189
